@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StitchClone — AI UI 生成器</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'Inter', sans-serif; }
+    body { background: #0a0a0f; color: #e5e7eb; }
+    .glass { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); backdrop-filter: blur(20px); }
+    .gradient-text { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .gradient-border { border-image: linear-gradient(135deg, #667eea, #764ba2) 1; }
+    .btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); transition: all 0.3s; }
+    .btn-primary:hover { opacity: 0.85; transform: translateY(-1px); box-shadow: 0 8px 30px rgba(102,126,234,0.4); }
+    .code-block { background: #0d0d14; border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; }
+    .typing-cursor::after { content: '|'; animation: blink 1s infinite; color: #667eea; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+    @keyframes pulse-ring { 0%{transform:scale(0.8);opacity:1} 100%{transform:scale(1.4);opacity:0} }
+    .pulse-dot { animation: pulse-ring 1.5s ease-out infinite; }
+    @keyframes slide-up { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+    .slide-up { animation: slide-up 0.5s ease-out forwards; }
+    .preview-frame { border-radius: 16px; overflow: hidden; }
+    pre code { font-size: 13px; line-height: 1.6; }
+    .tab-active { background: linear-gradient(135deg, rgba(102,126,234,0.2), rgba(118,75,162,0.2)); border-color: rgba(102,126,234,0.5); color: #a5b4fc; }
+    .component-chip { cursor: pointer; transition: all 0.2s; }
+    .component-chip:hover { background: rgba(102,126,234,0.15); border-color: rgba(102,126,234,0.4); }
+    .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+    .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+    #preview { width: 100%; height: 100%; border: none; }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <!-- Header -->
+  <header class="glass border-b border-white/5 px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-sm">S</div>
+      <span class="text-lg font-bold gradient-text">StitchClone</span>
+      <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Beta</span>
+    </div>
+    <div class="flex items-center gap-4 text-sm text-gray-400">
+      <span>🎨 中文版 · 专注电商场景</span>
+    </div>
+  </header>
+
+  <div class="flex h-[calc(100vh-65px)]">
+
+    <!-- LEFT PANEL: Editor -->
+    <div class="w-1/2 flex flex-col border-r border-white/5">
+
+      <!-- Prompt Bar -->
+      <div class="p-5 border-b border-white/5">
+        <label class="text-xs text-gray-500 uppercase tracking-wider mb-2 block">描述你想要的设计</label>
+        <div class="relative">
+          <textarea id="prompt" rows="3"
+            class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-gray-200 placeholder-gray-600 resize-none focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 transition"
+            placeholder="例如：生成一个手机促销落地页，包含主图大banner、主推商品卡片（价格+标签）、倒计时、立即购买按钮"></textarea>
+          <div id="charCount" class="absolute bottom-2 right-3 text-xs text-gray-600">0 / 500</div>
+        </div>
+        <div class="flex items-center gap-2 mt-3">
+          <button onclick="generateUI()" class="btn-primary px-6 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            生成 UI
+          </button>
+          <button onclick="loadTemplate('phone_sale')" class="px-4 py-2.5 rounded-xl text-sm text-gray-400 border border-white/10 hover:bg-white/5 transition">📱 手机促销</button>
+          <button onclick="loadTemplate('double11')" class="px-4 py-2.5 rounded-xl text-sm text-gray-400 border border-white/10 hover:bg-white/5 transition">🏷️ 双11活动</button>
+          <button onclick="loadTemplate('618')" class="px-4 py-2.5 rounded-xl text-sm text-gray-400 border border-white/10 hover:bg-white/5 transition">🔥 618大促</button>
+        </div>
+      </div>
+
+      <!-- Component Chips -->
+      <div class="px-5 py-3 border-b border-white/5">
+        <label class="text-xs text-gray-500 uppercase tracking-wider mb-2 block">快速添加组件</label>
+        <div class="flex flex-wrap gap-2">
+          <button class="component-chip px-3 py-1.5 rounded-lg text-xs border border-white/10 text-gray-400" onclick="appendPrompt('主图Banner')">🖼️ 主图Banner</button>
+          <button class="component-chip px-3 py-1.5 rounded-lg text-xs border border-white/10 text-gray-400" onclick="appendPrompt('商品卡片')">📦 商品卡片</button>
+          <button class="component-chip px-3 py-1.5 rounded-lg text-xs border border-white/10 text-gray-400" onclick="appendPrompt('倒计时')">⏰ 倒计时</button>
+          <button class="component-chip px-3 py-1.5 rounded-lg text-xs border border-white/10 text-gray-400" onclick="appendPrompt('优惠券')">🎟️ 优惠券</button>
+          <button class="component-chip px-3 py-1.5 rounded-lg text-xs border border-white/10 text-gray-400" onclick="appendPrompt('评价星级')">⭐ 评价星级</button>
+          <button class="component-chip px-3 py-1.5 rounded-lg text-xs border border-white/10 text-gray-400" onclick="appendPrompt('底部导航')">📍 底部导航</button>
+          <button class="component-chip px-3 py-1.5 rounded-lg text-xs border border-white/10 text-gray-400" onclick="appendPrompt('限时特价标签')">⚡ 限时特价</button>
+          <button class="component-chip px-3 py-1.5 rounded-lg text-xs border border-white/10 text-gray-400" onclick="appendPrompt('客服悬浮按钮')">💬 客服</button>
+        </div>
+      </div>
+
+      <!-- Generation Status -->
+      <div id="genStatus" class="px-5 py-3 border-b border-white/5 hidden">
+        <div class="flex items-center gap-3">
+          <div class="relative">
+            <div class="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center">
+              <div class="w-5 h-5 rounded-full bg-indigo-500 absolute pulse-dot"></div>
+            </div>
+          </div>
+          <div>
+            <p id="statusText" class="text-sm text-indigo-300">正在分析描述词...</p>
+            <p id="statusSub" class="text-xs text-gray-500 mt-0.5">构建组件中</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Code Output -->
+      <div class="flex-1 overflow-hidden flex flex-col">
+        <div class="flex items-center justify-between px-5 py-2 border-b border-white/5">
+          <div class="flex gap-1">
+            <button id="tabHtml" class="px-3 py-1 rounded-lg text-xs border border-white/10 text-gray-400 tab-active" onclick="switchTab('html')">HTML</button>
+            <button id="tabCss" class="px-3 py-1 rounded-lg text-xs border border-white/10 text-gray-400" onclick="switchTab('css')">CSS</button>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="copyCode()" class="px-3 py-1 rounded-lg text-xs text-gray-400 border border-white/10 hover:bg-white/5 transition flex items-center gap-1">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+              复制
+            </button>
+            <button onclick="downloadCode()" class="px-3 py-1 rounded-lg text-xs text-gray-400 border border-white/10 hover:bg-white/5 transition flex items-center gap-1">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              下载
+            </button>
+          </div>
+        </div>
+        <div id="codePanel" class="flex-1 overflow-auto p-5 scrollbar-thin">
+          <pre id="codeOutput" class="text-sm text-gray-300 leading-relaxed"><span class="text-gray-600">// 代码将在此处生成...
+// 在左侧输入描述，或点击"生成 UI"按钮</span></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL: Preview -->
+    <div class="w-1/2 flex flex-col bg-[#0d0d14]">
+      <div class="flex items-center justify-between px-5 py-3 border-b border-white/5">
+        <span class="text-sm text-gray-400">实时预览</span>
+        <div class="flex gap-2">
+          <button onclick="setPreviewSize('desktop')" class="px-3 py-1 rounded-lg text-xs text-gray-400 border border-white/10 hover:bg-white/5 transition" id="sizeDesktop">💻 桌面</button>
+          <button onclick="setPreviewSize('tablet')" class="px-3 py-1 rounded-lg text-xs text-gray-400 border border-white/10 hover:bg-white/5 transition" id="sizeTablet">📱 平板</button>
+          <button onclick="setPreviewSize('mobile')" class="px-3 py-1 rounded-lg text-xs text-gray-400 border border-white/10 hover:bg-white/5 transition" id="sizeMobile">📲 手机</button>
+        </div>
+      </div>
+      <div class="flex-1 p-4 flex items-center justify-center" id="previewContainer">
+        <div id="previewWrapper" class="w-full h-full bg-white rounded-2xl shadow-2xl transition-all duration-300" style="max-width:100%">
+          <iframe id="preview" class="preview-frame w-full h-full" srcdoc="<!DOCTYPE html><html><head><meta charset='UTF-8'><style>body{display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f4f4f5;font-family:system-ui,sans-serif;color:#9ca3af;font-size:14px;flex-direction:column;gap:8px}.icon{font-size:40px;opacity:0.3}.sub{font-size:12px;opacity:0.5}</style></head><body><div class='icon'>🎨</div><div>在此预览生成的UI</div><div class='sub'>左侧输入描述 → 点击生成</div></body></html>"></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentTab = 'html';
+    let generatedCode = { html: '', css: '' };
+    let currentPreviewSize = 'desktop';
+    const statusMessages = [
+      { text: '正在分析描述词...', sub: '提取关键设计元素' },
+      { text: '匹配电商组件库...', sub: '查找最优组合' },
+      { text: '生成 HTML 结构...', sub: '组装页面框架' },
+      { text: '应用 Tailwind 样式...', sub: '美化为生产级代码' },
+      { text: '渲染预览中...', sub: '生成最终交付物' }
+    ];
+
+    // Template presets
+    const templates = {
+      phone_sale: '生成一个手机新品促销落地页，包含：顶部主图Banner（渐变背景+主推手机图片+促销标签）、热卖商品卡片区（3款手机+价格+折扣标签）、倒计时组件（限时优惠24小时）、底部CTA按钮（立即购买+客服）',
+      double11: '双11购物节活动页，包含：全屏主Banner（双11logo+主推爆款图）、优惠券领取区（3张满减券）、商品瀑布流（6款精选+价格划线对比）、倒计时（距双11结束）、悬浮客服按钮',
+      '618': '618品质盛典活动页，包含：大促主视觉（红色调+折扣力度）、品牌专区（4个品牌logo）、限时秒杀区（倒计时+库存进度条）、用户评价区（3条真实评价+头像）、底部购买表单'
+    };
+
+    function loadTemplate(key) {
+      document.getElementById('prompt').value = templates[key];
+      document.getElementById('prompt').dispatchEvent(new Event('input'));
+    }
+
+    function appendPrompt(component) {
+      const ta = document.getElementById('prompt');
+      ta.value += (ta.value ? '、' : '包含：') + component;
+      ta.dispatchEvent(new Event('input'));
+    }
+
+    document.getElementById('prompt').addEventListener('input', function() {
+      const len = this.value.length;
+      document.getElementById('charCount').textContent = `${len} / 500`;
+      document.getElementById('charCount').style.color = len > 450 ? '#f87171' : '#6b7280';
+    });
+
+    function switchTab(tab) {
+      currentTab = tab;
+      document.getElementById('tabHtml').classList.toggle('tab-active', tab === 'html');
+      document.getElementById('tabCss').classList.toggle('tab-active', tab === 'css');
+      document.getElementById('codeOutput').textContent = tab === 'html' ? generatedCode.html : generatedCode.css;
+      hljsHighlight();
+    }
+
+    async function generateUI() {
+      const prompt = document.getElementById('prompt').value.trim();
+      if (!prompt) { alert('请输入描述词！'); return; }
+
+      const status = document.getElementById('genStatus');
+      const statusText = document.getElementById('statusText');
+      const statusSub = document.getElementById('statusSub');
+      status.classList.remove('hidden');
+
+      // Animate through status messages
+      for (let i = 0; i < statusMessages.length; i++) {
+        statusText.textContent = statusMessages[i].text;
+        statusSub.textContent = statusMessages[i].sub;
+        await new Promise(r => setTimeout(r, 600));
+      }
+
+      // Generate based on prompt analysis
+      const result = buildUIFromPrompt(prompt);
+      generatedCode = result;
+
+      status.classList.add('hidden');
+      document.getElementById('codeOutput').textContent = result.html;
+      updatePreview(result.html);
+      hljsHighlight();
+    }
+
+    function buildUIFromPrompt(prompt) {
+      const lower = prompt.toLowerCase();
+
+      // Base HTML
+      let html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"><\/script>
+  <style>
+    * { font-family: 'Inter', -apple-system, sans-serif; }
+    @keyframes fadeInUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.6; } }
+    @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+    .animate-in { animation: fadeInUp 0.6s ease-out forwards; }
+    .countdown-num { font-variant-numeric: tabular-nums; }
+    .shimmer-btn { background: linear-gradient(90deg, #f97316 0%, #ea580c 25%, #f97316 50%, #ea580c 75%, #f97316 100%); background-size: 200% 100%; animation: shimmer 2s linear infinite; }
+    .card-hover { transition: transform 0.3s, box-shadow 0.3s; }
+    .card-hover:hover { transform: translateY(-4px); box-shadow: 0 20px 40px rgba(0,0,0,0.12); }
+    .countdown-bg { background: linear-gradient(135deg, #1a1a2e, #16213e); }
+  </style>
+</head>
+<body class="bg-gray-50">`;
+
+      // Determine theme colors based on keywords
+      let primaryColor = 'indigo';
+      let accentColor = '#6366f1';
+      if (lower.includes('双11') || lower.includes('11.11')) {
+        primaryColor = 'red'; accentColor = '#ef4444';
+        html += `<style>.hero-bg { background: linear-gradient(135deg, #7f1d1d 0%, #dc2626 50%, #b91c1c 100%); }</style>`;
+      } else if (lower.includes('618') || lower.includes('大促')) {
+        primaryColor = 'orange'; accentColor = '#f97316';
+        html += `<style>.hero-bg { background: linear-gradient(135deg, #c2410c 0%, #ea580c 50%, #f97316 100%); }</style>`;
+      } else {
+        html += `<style>.hero-bg { background: linear-gradient(135deg, #3730a3 0%, #6366f1 50%, #818cf8 100%); }</style>`;
+      }
+
+      // Generate components based on keywords
+      const components = [];
+
+      if (lower.includes('banner') || lower.includes('主图') || lower.includes('hero')) {
+        components.push(getHeroBanner(lower));
+      }
+
+      if (lower.includes('商品') || lower.includes('卡片') || lower.includes('手机') || lower.includes('商品卡片')) {
+        components.push(getProductCards(lower));
+      }
+
+      if (lower.includes('倒计时') || lower.includes('限时')) {
+        components.push(getCountdown(lower));
+      }
+
+      if (lower.includes('优惠') || lower.includes('券') || lower.includes('优惠券')) {
+        components.push(getCouponSection());
+      }
+
+      if (lower.includes('评价') || lower.includes('星级') || lower.includes('评论')) {
+        components.push(getReviews());
+      }
+
+      if (lower.includes('秒杀') || lower.includes('库存')) {
+        components.push(getFlashSale());
+      }
+
+      if (lower.includes('品牌') || lower.includes('专区')) {
+        components.push(getBrandSection());
+      }
+
+      if (lower.includes('底部') || lower.includes('cta') || lower.includes('购买')) {
+        components.push(getCTASection(lower));
+      }
+
+      if (lower.includes('客服') || lower.includes('悬浮')) {
+        components.push(getFloatingChat());
+      }
+
+      // If no specific components, build a default landing page
+      if (components.length === 0) {
+        components.push(getHeroBanner(lower));
+        components.push(getProductCards(lower));
+        components.push(getCountdown(lower));
+        components.push(getCTASection(lower));
+      }
+
+      html += '\n  ' + components.join('\n\n  ');
+      html += `\n\n  <!-- Footer -->
+  <footer class="bg-gray-900 text-gray-400 py-8 text-center text-sm">
+    <p>© 2026 StitchClone Demo · AI生成界面仅供展示</p>
+  </footer>
+
+  <script>
+    // Countdown timer
+    function updateCountdown() {
+      const now = new Date();
+      const end = new Date();
+      end.setDate(end.getDate() + 1);
+      const diff = end - now;
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      const hh = document.getElementById('cd-h');
+      const mm = document.getElementById('cd-m');
+      const ss = document.getElementById('cd-s');
+      if(hh) hh.textContent = String(h).padStart(2,'0');
+      if(mm) mm.textContent = String(m).padStart(2,'0');
+      if(ss) ss.textContent = String(s).padStart(2,'0');
+    }
+    setInterval(updateCountdown, 1000);
+    updateCountdown();
+  <\/script>
+</body>
+</html>`;
+
+      // CSS is minimal since we're using Tailwind
+      const css = `/* Tailwind handles most styling. Custom additions: */
+.hero-bg { /* gradient set dynamically */ }
+.shimmer-btn { background-size: 200% 100%; animation: shimmer 2s linear infinite; }
+@keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+.card-hover:hover { transform: translateY(-4px); }
+.countdown-num { font-variant-numeric: tabular-nums; }`;
+
+      return { html, css };
+    }
+
+    function getHeroBanner(lower) {
+      const hasDouble11 = lower.includes('双11') || lower.includes('11.11');
+      const has618 = lower.includes('618') || lower.includes('大促');
+      const title = hasDouble11 ? '双11狂欢节' : has618 ? '618品质盛典' : '新品首发限时特惠';
+      const subtitle = hasDouble11 ? '全网最低价 错过等一年' : has618 ? '爆款直降 品质保障' : '旗舰新品 全面开售';
+
+      return `<section class="hero-bg text-white relative overflow-hidden">
+  <div class="max-w-6xl mx-auto px-6 py-16 relative z-10">
+    <div class="flex flex-col md:flex-row items-center gap-8">
+      <div class="flex-1 animate-in">
+        <span class="inline-block px-3 py-1 rounded-full text-xs font-semibold mb-4" style="background:rgba(255,255,255,0.2)">🔥 限时抢购</span>
+        <h1 class="text-4xl md:text-5xl font-extrabold mb-4 leading-tight">${title}</h1>
+        <p class="text-lg text-white/80 mb-6">${subtitle}</p>
+        <div class="flex gap-4">
+          <a href="#buy" class="shimmer-btn px-8 py-3 rounded-xl font-bold text-white text-sm">立即选购</a>
+          <a href="#detail" class="px-6 py-3 rounded-xl font-semibold text-sm border border-white/30 hover:bg-white/10 transition">了解更多</a>
+        </div>
+      </div>
+      <div class="flex-1 flex justify-center">
+        <div class="w-64 h-64 rounded-3xl bg-white/10 backdrop-blur-sm flex items-center justify-center border border-white/20">
+          <span class="text-6xl">📱</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-gray-50 to-transparent"></div>
+</section>`;
+    }
+
+    function getProductCards(lower) {
+      const hasPhone = lower.includes('手机');
+      const products = hasPhone ? [
+        { name: '旗舰Pro Max', price: '4999', orig: '6999', tag: '热卖', emoji: '📱' },
+        { name: '轻薄Ultra', price: '3999', orig: '5499', tag: '新品', emoji: '📱' },
+        { name: '性价比Note', price: '1999', orig: '2999', tag: '推荐', emoji: '📱' }
+      ] : [
+        { name: '爆款商品A', price: '299', orig: '499', tag: '热卖', emoji: '📦' },
+        { name: '精品好物B', price: '159', orig: '299', tag: '新品', emoji: '🎁' },
+        { name: '限时特惠C', price: '99', orig: '199', tag: '特惠', emoji: '⚡' }
+      ];
+
+      const cards = products.map(p => `
+        <div class="card-hover bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-100">
+          <div class="h-40 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+            <span class="text-5xl">${p.emoji}</span>
+          </div>
+          <div class="p-4">
+            <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold mb-2" style="background:#fef3c7;color:#d97706">${p.tag}</span>
+            <h3 class="font-bold text-gray-900 text-sm mb-1">${p.name}</h3>
+            <div class="flex items-baseline gap-2">
+              <span class="text-xl font-extrabold" style="color:${accentColor}">¥${p.price}</span>
+              <span class="text-xs text-gray-400 line-through">¥${p.orig}</span>
+            </div>
+            <button class="w-full mt-3 py-2 rounded-xl text-xs font-semibold text-white" style="background:${accentColor}">加入购物车</button>
+          </div>
+        </div>`).join('');
+
+      return `<section class="max-w-6xl mx-auto px-6 py-12">
+  <h2 class="text-2xl font-bold text-gray-900 mb-6">🔥 精选热卖</h2>
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">${cards}
+  </div>
+</section>`;
+    }
+
+    function getCountdown(lower) {
+      return `<section class="max-w-6xl mx-auto px-6 pb-12">
+  <div class="countdown-bg rounded-2xl p-8 text-white text-center">
+    <h2 class="text-xl font-bold mb-4">⏰ 限时特惠 · 剩余时间</h2>
+    <div class="flex justify-center gap-4 mb-6">
+      <div class="text-center">
+        <div id="cd-h" class="countdown-num text-4xl font-extrabold w-16 h-16 rounded-xl bg-white/10 flex items-center justify-center">00</div>
+        <span class="text-xs text-white/60 mt-1 block">小时</span>
+      </div>
+      <div class="text-4xl font-light self-start pt-2">:</div>
+      <div class="text-center">
+        <div id="cd-m" class="countdown-num text-4xl font-extrabold w-16 h-16 rounded-xl bg-white/10 flex items-center justify-center">00</div>
+        <span class="text-xs text-white/60 mt-1 block">分钟</span>
+      </div>
+      <div class="text-4xl font-light self-start pt-2">:</div>
+      <div class="text-center">
+        <div id="cd-s" class="countdown-num text-4xl font-extrabold w-16 h-16 rounded-xl bg-white/10 flex items-center justify-center">00</div>
+        <span class="text-xs text-white/60 mt-1 block">秒</span>
+      </div>
+    </div>
+    <p class="text-sm text-white/60">优惠截止后价格将恢复原价</p>
+  </div>
+</section>`;
+    }
+
+    function getCouponSection() {
+      return `<section class="max-w-6xl mx-auto px-6 pb-12">
+  <h2 class="text-xl font-bold text-gray-900 mb-4">🎟️ 领取优惠券</h2>
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="relative bg-gradient-to-r from-red-500 to-orange-500 rounded-xl p-4 text-white overflow-hidden">
+      <div class="absolute top-0 right-0 w-16 h-16 rounded-bl-full bg-white/10"></div>
+      <p class="text-3xl font-extrabold">¥100</p>
+      <p class="text-xs text-white/80">满500可用</p>
+      <button class="mt-2 px-4 py-1 bg-white text-red-600 rounded-lg text-xs font-bold">立即领取</button>
+    </div>
+    <div class="relative bg-gradient-to-r from-indigo-500 to-purple-500 rounded-xl p-4 text-white overflow-hidden">
+      <div class="absolute top-0 right-0 w-16 h-16 rounded-bl-full bg-white/10"></div>
+      <p class="text-3xl font-extrabold">¥50</p>
+      <p class="text-xs text-white/80">满300可用</p>
+      <button class="mt-2 px-4 py-1 bg-white text-indigo-600 rounded-lg text-xs font-bold">立即领取</button>
+    </div>
+    <div class="relative bg-gradient-to-r from-green-500 to-teal-500 rounded-xl p-4 text-white overflow-hidden">
+      <div class="absolute top-0 right-0 w-16 h-16 rounded-bl-full bg-white/10"></div>
+      <p class="text-3xl font-extrabold">¥20</p>
+      <p class="text-xs text-white/80">无门槛</p>
+      <button class="mt-2 px-4 py-1 bg-white text-green-600 rounded-lg text-xs font-bold">立即领取</button>
+    </div>
+  </div>
+</section>`;
+    }
+
+    function getReviews() {
+      const reviews = [
+        { name: '张先生', avatar: '👨', text: '产品质量非常好，物流也很快，客服态度很棒！', rating: 5 },
+        { name: '李女士', avatar: '👩', text: '性价比超高，买回来用了一周，非常满意！', rating: 5 },
+        { name: '王同学', avatar: '🧑', text: '学生党也能接受的价格，性能却很强劲，推荐！', rating: 4 }
+      ];
+      const cards = reviews.map(r => `
+        <div class="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+          <div class="flex items-center gap-3 mb-2">
+            <span class="text-2xl">${r.avatar}</span>
+            <div>
+              <p class="font-semibold text-gray-900 text-sm">${r.name}</p>
+              <p class="text-yellow-400 text-xs">${'⭐'.repeat(r.rating)}</p>
+            </div>
+          </div>
+          <p class="text-sm text-gray-600">${r.text}</p>
+        </div>`).join('');
+      return `<section class="max-w-6xl mx-auto px-6 pb-12">
+  <h2 class="text-xl font-bold text-gray-900 mb-4">💬 用户评价</h2>
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">${cards}</div>
+</section>`;
+    }
+
+    function getFlashSale() {
+      return `<section class="max-w-6xl mx-auto px-6 pb-12">
+  <h2 class="text-xl font-bold text-gray-900 mb-4">⚡ 限时秒杀</h2>
+  <div class="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+    <div class="flex items-center justify-between mb-4">
+      <span class="px-3 py-1 bg-red-100 text-red-600 rounded-lg text-xs font-bold">🔥 秒杀中</span>
+      <span class="text-sm text-gray-500">已有 <span class="font-bold text-gray-900">2,847</span> 人抢购</span>
+    </div>
+    <div class="space-y-3">
+      <div>
+        <div class="flex justify-between text-xs text-gray-500 mb-1"><span>库存</span><span>67%</span></div>
+        <div class="w-full bg-gray-200 rounded-full h-2"><div class="bg-red-500 h-2 rounded-full" style="width:67%"></div></div>
+      </div>
+      <div class="grid grid-cols-3 gap-3">
+        <div class="text-center p-3 bg-gray-50 rounded-xl"><span class="text-2xl">📱</span><p class="text-xs text-gray-500 mt-1">爆款手机</p><p class="font-bold text-red-500">¥1999</p></div>
+        <div class="text-center p-3 bg-gray-50 rounded-xl"><span class="text-2xl">🎧</span><p class="text-xs text-gray-500 mt-1">无线耳机</p><p class="font-bold text-red-500">¥299</p></div>
+        <div class="text-center p-3 bg-gray-50 rounded-xl"><span class="text-2xl">⌚</span><p class="text-xs text-gray-500 mt-1">智能手表</p><p class="font-bold text-red-500">¥599</p></div>
+      </div>
+    </div>
+  </div>
+</section>`;
+    }
+
+    function getBrandSection() {
+      return `<section class="max-w-6xl mx-auto px-6 pb-12">
+  <h2 class="text-xl font-bold text-gray-900 mb-4">🏆 品牌专区</h2>
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    ${['Apple', 'Samsung', 'Xiaomi', 'Huawei'].map(b => `
+    <div class="bg-white rounded-xl p-6 border border-gray-100 shadow-sm flex items-center justify-center hover:shadow-md transition cursor-pointer">
+      <span class="text-gray-400 text-sm font-semibold">${b}</span>
+    </div>`).join('')}
+  </div>
+</section>`;
+    }
+
+    function getCTASection(lower) {
+      return `<section id="buy" class="bg-gray-900 text-white py-16">
+  <div class="max-w-3xl mx-auto text-center px-6">
+    <h2 class="text-3xl font-extrabold mb-4">准备好入手了吗？</h2>
+    <p class="text-gray-400 mb-8">立即选购，享受限时优惠，错过再等一年！</p>
+    <div class="flex flex-col sm:flex-row gap-4 justify-center">
+      <button class="shimmer-btn px-8 py-4 rounded-xl font-bold text-white text-base">🛒 立即购买</button>
+      <button class="px-8 py-4 rounded-xl font-semibold text-base border border-white/20 hover:bg-white/10 transition">💬 咨询客服</button>
+    </div>
+  </div>
+</section>`;
+    }
+
+    function getFloatingChat() {
+      return `<div style="position:fixed;bottom:24px;right:24px;z-index:9999">
+  <button class="w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl" style="background:${accentColor}">
+    💬
+  </button>
+</div>`;
+    }
+
+    function updatePreview(html) {
+      const iframe = document.getElementById('preview');
+      iframe.srcdoc = html;
+    }
+
+    function setPreviewSize(size) {
+      currentPreviewSize = size;
+      const w = document.getElementById('previewWrapper');
+      if (size === 'desktop') { w.style.maxWidth = '100%'; w.style.height = '100%'; }
+      else if (size === 'tablet') { w.style.maxWidth = '768px'; w.style.height = '80%'; }
+      else { w.style.maxWidth = '375px'; w.style.height = '70%'; }
+      document.getElementById('sizeDesktop').classList.toggle('border-indigo-500', size==='desktop');
+      document.getElementById('sizeTablet').classList.toggle('border-indigo-500', size==='tablet');
+      document.getElementById('sizeMobile').classList.toggle('border-indigo-500', size==='mobile');
+    }
+
+    function copyCode() {
+      const code = currentTab === 'html' ? generatedCode.html : generatedCode.css;
+      navigator.clipboard.writeText(code).then(() => {
+        const btn = event.target.closest('button');
+        const orig = btn.innerHTML;
+        btn.innerHTML = '✅ 已复制!';
+        setTimeout(() => btn.innerHTML = orig, 1500);
+      });
+    }
+
+    function downloadCode() {
+      const blob = new Blob([generatedCode.html], {type: 'text/html'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'stitchclone-page.html';
+      a.click();
+    }
+
+    function hljsHighlight() {
+      // Simple syntax highlighting without hljs
+      const el = document.getElementById('codeOutput');
+      let code = el.textContent;
+      // Tags
+      code = code.replace(/(&lt;\/?[\w-]+)/g, '<span class="text-red-400">$1</span>');
+      code = code.replace(/(\/?&gt;)/g, '<span class="text-red-400">$1</span>');
+      // Attributes
+      code = code.replace(/(class|id|href|src|style)=/g, '<span class="text-blue-400">$1</span>=');
+      // Strings
+      code = code.replace(/(&quot;[^&]*&quot;|&#39;[^&]*&#39;)/g, '<span class="text-green-400">$1</span>');
+      // Comments
+      code = code.replace(/(\/\/.*$|\/\*[\s\S]*?\*\/)/gm, '<span class="text-gray-500">$1</span>');
+      el.innerHTML = code;
+    }
+  </script>
+</body>
+</html>
